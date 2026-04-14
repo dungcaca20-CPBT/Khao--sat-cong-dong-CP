@@ -1,385 +1,485 @@
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>C.P. Việt Nam - Community Survey App</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.js"></script>
-    <style>
-        :root {
-            --cp-red: #EE1C25;
-            --cp-yellow: #FFD400;
-            --cp-dark: #2D2D2D;
-        }
-        .bg-cp-red { background-color: var(--cp-red); }
-        .text-cp-red { color: var(--cp-red); }
-        .bg-cp-yellow { background-color: var(--cp-yellow); }
-        .border-cp-red { border-color: var(--cp-red); }
-        
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #F3F4F6;
-            color: var(--cp-dark);
-        }
-        .mobile-view {
-            max-width: 450px;
-            margin: 0 auto;
-            background: #FFFFFF;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 0 0 20px rgba(0,0,0,0.1);
-        }
-        .card {
-            border-radius: 16px;
-            border: 1px solid #E5E7EB;
-            padding: 16px;
-            margin-bottom: 12px;
-            background: white;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-        }
-        .map-container {
-            background-image: url('https://upload.wikimedia.org/wikipedia/commons/thumb/d/d3/Vietnam_location_map.svg/471px-Vietnam_location_map.svg.png');
-            background-size: contain;
-            background-repeat: no-repeat;
-            background-position: center;
-            height: 500px;
-            position: relative;
-        }
-        .pin {
-            position: absolute;
-            transform: translate(-50%, -100%);
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-        .pin:hover { transform: translate(-50%, -100%) scale(1.2); }
-        
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-thumb { background: #E5E7EB; border-radius: 10px; }
-    </style>
-</head>
-<body>
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell 
+} from 'recharts';
+import { 
+  MapPin, ClipboardList, LayoutDashboard, FileText, Send, 
+  Map as MapIcon, Filter, ChevronRight, User, AlertCircle, CheckCircle2,
+  Clock, MapPinned, Info
+} from 'lucide-react';
 
-<div id="app" class="mobile-view relative">
-    <!-- Header -->
-    <header class="bg-cp-red text-white p-4 flex items-center justify-between sticky top-0 z-50">
-        <div class="flex items-center gap-2">
-            <img src="https://www.cp.com.vn/images/logo.png" alt="Logo" class="h-8 bg-white p-1 rounded">
-            <div>
-                <h1 class="text-sm font-bold leading-tight">C.P. VIỆT NAM</h1>
-                <p class="text-[10px] opacity-80 uppercase tracking-wider font-semibold">Cộng đồng & Môi trường</p>
-            </div>
-        </div>
-        <button class="p-2 hover:bg-white/10 rounded-full">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-        </button>
-    </header>
+// --- Giả lập Dữ liệu (Mock Data) ---
+const PROVINCES = ["Đồng Nai", "Bình Dương", "Hà Nội", "Hải Dương", "Tiền Giang"];
+const BRANCHES = {
+  "Đồng Nai": ["Chi nhánh Biên Hòa 1", "Chi nhánh Biên Hòa 2", "Nhà máy Thức ăn Chăn nuôi"],
+  "Bình Dương": ["Chi nhánh Bến Cát", "Chi nhánh Tân Uyên"],
+  "Hà Nội": ["Chi nhánh Xuân Mai", "Văn phòng Chương Mỹ"],
+};
 
-    <!-- Navigation -->
-    <nav class="flex border-b bg-white sticky top-[64px] z-40">
-        <button v-for="t in tabs" :key="t.id" 
-                @click="currentTab = t.id"
-                :class="['flex-1 py-3 text-[10px] font-bold uppercase flex flex-col items-center gap-1', currentTab === t.id ? 'text-cp-red border-b-2 border-cp-red' : 'text-gray-400']">
-            <i :data-lucide="t.icon" class="w-5 h-5"></i>
-            {{ t.label }}
-        </button>
-    </nav>
+const SURVEY_FACTORS = ["Nước thải", "Rác thải", "Tiếng ồn", "An ninh trật tự", "Lao động"];
+const RATING_LEVELS = ["Rất hài lòng", "Hài lòng", "Bình thường", "Không hài lòng", "Rất không hài lòng"];
 
-    <!-- Main Content -->
-    <main class="flex-1 overflow-y-auto p-4 pb-20">
-        
-        <!-- DASHBOARD -->
-        <div v-if="currentTab === 'dashboard'" class="animate-in fade-in">
-            <div class="flex gap-2 mb-4">
-                <select v-model="selectedProvince" class="flex-1 p-2 text-xs border rounded-lg font-medium outline-none bg-white">
-                    <option value="">Chọn Tỉnh/Thành</option>
-                    <option v-for="p in provinces" :value="p">{{ p }}</option>
-                </select>
-                <select v-model="selectedBranch" class="flex-1 p-2 text-xs border rounded-lg font-medium outline-none bg-white">
-                    <option value="">Chọn Chi nhánh</option>
-                    <option v-for="b in filteredBranches" :value="b.name">{{ b.name }}</option>
-                </select>
-            </div>
+const MOCK_STATS = [
+  { name: 'Nước thải', "Rất hài lòng": 40, "Hài lòng": 30, "Bình thường": 20, "Không hài lòng": 8, "Rất không hài lòng": 2 },
+  { name: 'Rác thải', "Rất hài lòng": 35, "Hài lòng": 35, "Bình thường": 20, "Không hài lòng": 7, "Rất không hài lòng": 3 },
+  { name: 'Tiếng ồn', "Rất hài lòng": 50, "Hài lòng": 25, "Bình thường": 15, "Không hài lòng": 5, "Rất không hài lòng": 5 },
+  { name: 'An ninh', "Rất hài lòng": 45, "Hài lòng": 35, "Bình thường": 10, "Không hài lòng": 8, "Rất không hài lòng": 2 },
+  { name: 'Lao động', "Rất hài lòng": 60, "Hài lòng": 25, "Bình thường": 10, "Không hài lòng": 3, "Rất không hài lòng": 2 },
+];
 
-            <div v-if="currentBranchData">
-                <div class="card bg-cp-red text-white border-none mb-4">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-[10px] uppercase opacity-80">Tổng hộ khảo sát</p>
-                            <h2 class="text-3xl font-black">245</h2>
-                        </div>
-                        <div class="text-right">
-                            <p class="text-[10px] uppercase opacity-80">% Hài lòng</p>
-                            <h2 class="text-3xl font-black">92%</h2>
-                        </div>
-                    </div>
-                </div>
+const COLORS = ['#10b981', '#34d399', '#9ca3af', '#f87171', '#ef4444'];
+const CP_RED = '#E11D48';
+const CP_YELLOW = '#FBBF24';
 
-                <h3 class="font-bold text-[10px] uppercase mb-3 text-gray-500 tracking-wider">Chỉ số đo lường (KPIs)</h3>
-                
-                <div v-for="kpi in kpiResults" :key="kpi.name" class="card">
-                    <div class="flex justify-between items-center mb-4">
-                        <h4 class="font-bold text-sm text-gray-800">{{ kpi.name }}</h4>
-                        <span class="text-[9px] bg-green-100 text-green-700 px-2 py-1 rounded-full font-bold uppercase">Hoàn thành</span>
-                    </div>
-                    
-                    <div class="space-y-3">
-                        <div v-for="rating in kpi.ratings" :key="rating.level" class="text-[11px]">
-                            <div class="flex justify-between items-center mb-1">
-                                <span class="font-medium text-gray-600">{{ rating.level }}</span>
-                                <span class="font-bold">{{ rating.count }} ý kiến</span>
-                            </div>
-                            <div class="w-full bg-gray-100 h-1.5 rounded-full overflow-hidden">
-                                <div class="bg-cp-red h-full" :style="{width: (rating.count / 50 * 100) + '%'}"></div>
-                            </div>
-                            <div v-if="rating.level.includes('Không hài lòng') && rating.count > 0" class="mt-2 bg-red-50 p-2 rounded-lg border border-red-100">
-                                <p class="text-red-700 font-bold mb-1 text-[10px]">💡 Giải pháp thực hiện:</p>
-                                <p class="text-gray-600 italic text-[10px]">Nâng cấp hệ thống xử lý nước thải giai đoạn 2. Phụ trách: BP. Môi trường. Deadline: 30/06/2026.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+const App = () => {
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [selectedProvince, setSelectedProvince] = useState(PROVINCES[0]);
+  const [selectedBranch, setSelectedBranch] = useState(BRANCHES[PROVINCES[0]][0]);
+  const [isLoading, setIsLoading] = useState(false);
 
-                <div class="card border-yellow-200 bg-yellow-50">
-                    <h4 class="font-bold text-[10px] uppercase text-yellow-700 mb-2">Ý kiến nổi bật</h4>
-                    <ul class="text-[11px] space-y-2 text-gray-700">
-                        <li class="flex gap-2"><span>✅</span> "Công ty hỗ trợ xây dựng đường nông thôn rất tốt."</li>
-                        <li class="flex gap-2"><span>❌</span> "Xe vận chuyển thức ăn gia súc đôi khi gây bụi vào giờ cao điểm."</li>
-                    </ul>
-                </div>
-            </div>
-            <div v-else class="text-center py-20 text-gray-400">
-                <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="mx-auto mb-2 opacity-20"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-                <p class="text-xs">Vui lòng chọn Tỉnh và Chi nhánh để xem báo cáo</p>
-            </div>
-        </div>
+  // Form State
+  const [surveyForm, setSurveyForm] = useState({
+    fullName: '',
+    birthYear: '',
+    gender: 'Nam',
+    address: '',
+    distance: '',
+    residencyYears: 'dưới 5 năm',
+    proximity: [],
+    factorRatings: {
+      "Rác thải": "Bình thường",
+      "Tiếng ồn": "Bình thường",
+      "Bụi": "Bình thường",
+      "Nước thải": "Bình thường",
+      "An ninh trật tự": "Bình thường",
+      "Sử dụng lao động": "Bình thường"
+    },
+    topConcern: '',
+    complianceRating: 'Bình thường',
+    otherOpinions: ''
+  });
 
-        <!-- BẢN ĐỒ (MAP) -->
-        <div v-if="currentTab === 'map'" class="h-full flex flex-col">
-            <div class="flex gap-2 mb-4">
-                <button v-for="r in ['Bắc', 'Trung', 'Nam']" 
-                        @click="mapRegion = r"
-                        :class="['flex-1 py-2 text-[11px] font-bold rounded-lg border transition-all', mapRegion === r ? 'bg-cp-red text-white border-cp-red' : 'bg-white text-gray-500 border-gray-200']">
-                    Miền {{ r }}
+  const handleProvinceChange = (e) => {
+    const province = e.target.value;
+    setSelectedProvince(province);
+    setSelectedBranch(BRANCHES[province][0]);
+  };
+
+  const handleFormSubmit = (e) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setTimeout(() => {
+      setIsLoading(false);
+      alert('Khảo sát đã được lưu thành công vào hệ thống!');
+      setActiveTab('dashboard');
+    }, 1500);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col font-sans text-gray-800">
+      {/* --- Sidebar / Navigation (Desktop) --- */}
+      <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between h-16">
+            <div className="flex items-center">
+              <div className="flex-shrink-0 flex items-center gap-2">
+                <div className="w-10 h-10 bg-rose-600 rounded-full flex items-center justify-center text-white font-bold text-xl">CP</div>
+                <span className="text-xl font-bold text-gray-900 hidden md:block">C.P. Việt Nam</span>
+              </div>
+              <div className="hidden sm:ml-8 sm:flex sm:space-x-4">
+                <button 
+                  onClick={() => setActiveTab('dashboard')}
+                  className={`inline-flex items-center px-3 py-2 text-sm font-medium border-b-2 ${activeTab === 'dashboard' ? 'border-rose-600 text-rose-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                  <LayoutDashboard className="w-4 h-4 mr-2" /> Tổng hợp
                 </button>
+                <button 
+                  onClick={() => setActiveTab('survey')}
+                  className={`inline-flex items-center px-3 py-2 text-sm font-medium border-b-2 ${activeTab === 'survey' ? 'border-rose-600 text-rose-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                  <ClipboardList className="w-4 h-4 mr-2" /> Khảo sát
+                </button>
+                <button 
+                  onClick={() => setActiveTab('map')}
+                  className={`inline-flex items-center px-3 py-2 text-sm font-medium border-b-2 ${activeTab === 'map' ? 'border-rose-600 text-rose-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+                >
+                  <MapPinned className="w-4 h-4 mr-2" /> Bản đồ
+                </button>
+              </div>
             </div>
-            
-            <div class="map-container rounded-2xl border shadow-inner">
-                <div v-for="m in filteredMarkers" :key="m.id" 
-                     class="pin group" 
-                     :style="{top: m.y + '%', left: m.x + '%'}"
-                     @click="selectedBranch = m.name; selectedProvince = m.province; currentTab = 'dashboard'">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="m.satisfaction > 80 ? 'text-green-500' : 'text-cp-red'"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-                    <div class="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[9px] px-2 py-1 rounded whitespace-nowrap mb-1 font-bold">
-                        {{ m.name }} ({{ m.satisfaction }}%)
-                    </div>
-                </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded font-semibold border border-amber-200 uppercase">Admin HR</span>
+              <div className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center">
+                <User className="w-5 h-5 text-gray-600" />
+              </div>
             </div>
-            <div class="mt-4 flex justify-between text-[10px] font-bold uppercase text-gray-400 px-2">
-                <div class="flex items-center gap-1"><span class="w-3 h-3 bg-green-500 rounded-full"></span> Hài lòng cao</div>
-                <div class="flex items-center gap-1"><span class="w-3 h-3 bg-cp-red rounded-full"></span> Cần cải thiện</div>
-            </div>
+          </div>
         </div>
+      </nav>
 
-        <!-- KHẢO SÁT (SURVEY FORM) -->
-        <div v-if="currentTab === 'survey'" class="animate-in slide-in-from-bottom">
-            <div class="card">
-                <h3 class="font-bold text-sm uppercase mb-4 text-cp-red flex items-center gap-2">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
-                    Phiếu khảo sát thực địa
-                </h3>
-                
-                <div class="space-y-4">
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="col-span-2">
-                            <label class="text-[10px] font-bold text-gray-400 uppercase ml-1">Chi nhánh</label>
-                            <select class="w-full p-3 border rounded-xl text-xs bg-gray-50 outline-none mt-1">
-                                <option>CP Xuân Mai</option>
-                                <option>CP Đồng Nai</option>
-                            </select>
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-bold text-gray-400 uppercase ml-1">Họ và tên</label>
-                            <input type="text" placeholder="Nhập tên..." class="w-full p-3 border rounded-xl text-xs outline-none focus:border-cp-red mt-1">
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-bold text-gray-400 uppercase ml-1">Năm sinh</label>
-                            <input type="number" placeholder="19xx" class="w-full p-3 border rounded-xl text-xs outline-none focus:border-cp-red mt-1">
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-bold text-gray-400 uppercase ml-1">Giới tính</label>
-                            <div class="flex gap-2 mt-1">
-                                <button class="flex-1 py-2 border rounded-lg text-[10px] font-bold hover:bg-cp-red hover:text-white transition-colors">Nam</button>
-                                <button class="flex-1 py-2 border rounded-lg text-[10px] font-bold hover:bg-cp-red hover:text-white transition-colors">Nữ</button>
-                            </div>
-                        </div>
-                        <div>
-                            <label class="text-[10px] font-bold text-gray-400 uppercase ml-1">Khoảng cách (m)</label>
-                            <input type="number" placeholder="Ví dụ: 500" class="w-full p-3 border rounded-xl text-xs outline-none focus:border-cp-red mt-1">
-                        </div>
-                    </div>
-
-                    <hr class="my-4">
-
-                    <div class="space-y-6">
-                        <div>
-                            <p class="text-xs font-bold mb-3 text-gray-700">1. Ông/Bà đã cư trú ở đây bao nhiêu năm?</p>
-                            <div class="grid grid-cols-2 gap-2">
-                                <button v-for="opt in ['Dưới 5 năm', '5 - 10 năm', '11 - 20 năm', 'Trên 20 năm']" 
-                                        class="p-2 border rounded-lg text-[10px] text-left hover:border-cp-red bg-white">
-                                    {{ opt }}
-                                </button>
-                            </div>
-                        </div>
-
-                        <div>
-                            <p class="text-xs font-bold mb-3 text-gray-700">2. Nhà Ông/Bà gần khu vực nào? (Có thể chọn nhiều)</p>
-                            <div class="flex flex-wrap gap-2">
-                                <label v-for="opt in ['Kênh rạch', 'Sông', 'Cống thoát nước', 'Khác']" class="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg text-[10px] border cursor-pointer">
-                                    <input type="checkbox" class="accent-cp-red"> {{ opt }}
-                                </label>
-                            </div>
-                        </div>
-
-                        <div>
-                            <p class="text-xs font-bold mb-3 text-gray-700">3. Đánh giá mức tác động của C.P.:</p>
-                            <div v-for="factor in ['Rác thải', 'Tiếng ồn', 'Bụi', 'Nước thải', 'An ninh', 'Lao động']" class="mb-3 bg-gray-50 p-3 rounded-xl">
-                                <p class="text-[10px] font-bold text-gray-500 mb-2 uppercase">{{ factor }}</p>
-                                <select class="w-full p-2 border rounded-lg text-xs bg-white outline-none">
-                                    <option>Tác động tích cực, rất tốt</option>
-                                    <option>Tác động tốt</option>
-                                    <option>Bình thường</option>
-                                    <option>Không ảnh hưởng nhiều</option>
-                                    <option>Tác động rất xấu</option>
-                                </select>
-                            </div>
-                        </div>
-
-                        <div>
-                            <p class="text-xs font-bold mb-3 text-gray-700">6. Ý kiến/đánh giá/đề xuất khác?</p>
-                            <textarea rows="3" class="w-full p-3 border rounded-xl text-xs outline-none focus:border-cp-red bg-gray-50" placeholder="Ghi nhận ý kiến..."></textarea>
-                        </div>
-                    </div>
-
-                    <button @click="submitSurvey" class="w-full bg-cp-red text-white py-4 rounded-2xl font-black shadow-xl shadow-red-100 flex items-center justify-center gap-2 active:scale-95 transition-all mt-6">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
-                        LƯU & GỬI KẾT QUẢ
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+        {activeTab === 'dashboard' && (
+          <div className="space-y-6">
+            {/* Header & Filter Section */}
+            <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
+              <div className="flex flex-col md:flex-row md:items-end gap-4">
+                <div className="flex-1 space-y-2">
+                  <h1 className="text-2xl font-bold text-gray-900">Dashboard Tiến độ & Kết quả</h1>
+                  <p className="text-sm text-gray-500 font-medium">Theo dõi dữ liệu "sống" từ hệ thống SharePoint chi nhánh</p>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-gray-400 uppercase">Tỉnh/Thành phố</label>
+                    <select 
+                      value={selectedProvince}
+                      onChange={handleProvinceChange}
+                      className="block w-full border-gray-200 rounded-lg text-sm focus:ring-rose-500 focus:border-rose-500 bg-gray-50 p-2"
+                    >
+                      {PROVINCES.map(p => <option key={p} value={p}>{p}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-gray-400 uppercase">Chi nhánh</label>
+                    <select 
+                      value={selectedBranch}
+                      onChange={(e) => setSelectedBranch(e.target.value)}
+                      className="block w-full border-gray-200 rounded-lg text-sm focus:ring-rose-500 focus:border-rose-500 bg-gray-50 p-2"
+                    >
+                      {BRANCHES[selectedProvince]?.map(b => <option key={b} value={b}>{b}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex items-end">
+                    <button className="bg-rose-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-rose-700 transition flex items-center gap-2">
+                      <FileText className="w-4 h-4" /> Xuất Báo Cáo
                     </button>
+                  </div>
                 </div>
+              </div>
             </div>
-        </div>
-    </main>
 
-    <!-- Success Modal -->
-    <div v-if="showSuccess" class="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
-        <div class="bg-white rounded-3xl p-8 w-full max-w-xs text-center shadow-2xl animate-in zoom-in duration-300">
-            <div class="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            {/* Quick Stats Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
+                <div className="bg-blue-50 p-3 rounded-lg text-blue-600"><ClipboardList /></div>
+                <div>
+                  <p className="text-sm text-gray-500 font-medium">Tổng số hộ khảo sát</p>
+                  <h3 className="text-2xl font-bold">1,248</h3>
+                </div>
+              </div>
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
+                <div className="bg-green-50 p-3 rounded-lg text-green-600"><CheckCircle2 /></div>
+                <div>
+                  <p className="text-sm text-gray-500 font-medium">% Hài lòng</p>
+                  <h3 className="text-2xl font-bold text-green-600">82.4%</h3>
+                </div>
+              </div>
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
+                <div className="bg-rose-50 p-3 rounded-lg text-rose-600"><AlertCircle /></div>
+                <div>
+                  <p className="text-sm text-gray-500 font-medium">Phản ánh tiêu cực</p>
+                  <h3 className="text-2xl font-bold text-rose-600">42</h3>
+                </div>
+              </div>
+              <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex items-center gap-4">
+                <div className="bg-amber-50 p-3 rounded-lg text-amber-600"><Clock /></div>
+                <div>
+                  <p className="text-sm text-gray-500 font-medium">Chưa xử lý</p>
+                  <h3 className="text-2xl font-bold text-amber-600">12</h3>
+                </div>
+              </div>
             </div>
-            <h3 class="text-lg font-black text-gray-800 uppercase leading-tight">Đã lưu dữ liệu!</h3>
-            <p class="text-[11px] text-gray-500 mt-2">Dữ liệu đã được đồng bộ trực tiếp vào hệ thống quản lý.</p>
-            <button @click="showSuccess = false" class="w-full mt-6 bg-cp-red text-white py-3 rounded-xl font-bold text-xs uppercase tracking-widest active:scale-95 transition-all">Đóng</button>
-        </div>
-    </div>
 
-    <!-- Export Button (Float) -->
-    <div v-if="currentTab === 'dashboard' && selectedBranch" class="fixed bottom-6 right-6 z-30">
-        <button @click="exportReport" class="bg-cp-yellow text-cp-red w-14 h-14 rounded-full shadow-2xl flex items-center justify-center border-4 border-white active:scale-90 transition-all">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+            {/* Charts Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h3 className="text-lg font-bold mb-6 flex items-center gap-2">
+                   Đánh giá 5 yếu tố cốt lõi (%)
+                </h3>
+                <div className="h-[300px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={MOCK_STATS} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                      <XAxis type="number" hide />
+                      <YAxis dataKey="name" type="category" width={100} tick={{fontSize: 12, fontWeight: 500}} />
+                      <Tooltip />
+                      <Legend verticalAlign="top" />
+                      <Bar dataKey="Rất hài lòng" stackId="a" fill={COLORS[0]} />
+                      <Bar dataKey="Hài lòng" stackId="a" fill={COLORS[1]} />
+                      <Bar dataKey="Bình thường" stackId="a" fill={COLORS[2]} />
+                      <Bar dataKey="Không hài lòng" stackId="a" fill={COLORS[3]} />
+                      <Bar dataKey="Rất không hài lòng" stackId="a" fill={COLORS[4]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h3 className="text-lg font-bold mb-4">Ý kiến nổi bật</h3>
+                <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
+                  <div className="p-3 bg-green-50 rounded-lg border-l-4 border-green-500">
+                    <p className="text-xs font-bold text-green-700 uppercase">Tích cực</p>
+                    <p className="text-sm text-gray-700 italic">"Công ty hỗ trợ xây dựng đường nông thôn rất tốt, bà con phấn khởi."</p>
+                  </div>
+                  <div className="p-3 bg-rose-50 rounded-lg border-l-4 border-rose-500">
+                    <p className="text-xs font-bold text-rose-700 uppercase">Cần lưu ý</p>
+                    <p className="text-sm text-gray-700 italic">"Giờ cao điểm xe chở thức ăn gây tiếng ồn lớn ảnh hưởng giấc ngủ trẻ em."</p>
+                  </div>
+                  <div className="p-3 bg-amber-50 rounded-lg border-l-4 border-amber-500">
+                    <p className="text-xs font-bold text-amber-700 uppercase">Góp ý</p>
+                    <p className="text-sm text-gray-700 italic">"Cần kiểm soát rác thải nhựa ở khu vực cổng phụ nhà máy."</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Negative Feedback & Solutions Table */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="p-4 border-b border-gray-100 bg-gray-50">
+                <h3 className="font-bold text-rose-600 flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5" /> Danh sách phản ánh tiêu cực & Giải pháp
+                </h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="text-xs uppercase text-gray-400 bg-gray-50/50">
+                      <th className="p-4 font-semibold">Yếu tố</th>
+                      <th className="p-4 font-semibold">Nội dung phản ánh</th>
+                      <th className="p-4 font-semibold">Giải pháp thực hiện</th>
+                      <th className="p-4 font-semibold">Phụ trách</th>
+                      <th className="p-4 font-semibold">Thời hạn</th>
+                      <th className="p-4 font-semibold">Trạng thái</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-sm divide-y divide-gray-100">
+                    <tr>
+                      <td className="p-4 font-medium">Tiếng ồn</td>
+                      <td className="p-4 text-gray-600">Xe container chạy đêm gây ồn</td>
+                      <td className="p-4 text-gray-700">Điều chỉnh lịch xuất nhập hàng trước 22h</td>
+                      <td className="p-4">Nguyễn Văn A (Logistics)</td>
+                      <td className="p-4">15/05/2024</td>
+                      <td className="p-4"><span className="px-2 py-1 bg-amber-100 text-amber-700 rounded text-xs">Đang xử lý</span></td>
+                    </tr>
+                    <tr>
+                      <td className="p-4 font-medium">Rác thải</td>
+                      <td className="p-4 text-gray-600">Mùi hôi từ khu vực tập kết rác tạm</td>
+                      <td className="p-4 text-gray-700">Lắp đặt hệ thống khử mùi, tăng tần suất thu gom</td>
+                      <td className="p-4">Trần Thị B (Admin)</td>
+                      <td className="p-4">20/04/2024</td>
+                      <td className="p-4"><span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs">Hoàn thành</span></td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'survey' && (
+          <div className="max-w-3xl mx-auto">
+            <div className="bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden">
+              {/* Form Header */}
+              <div className="bg-rose-600 p-6 text-white">
+                <div className="flex items-center gap-3 mb-2">
+                  <div className="p-2 bg-white/20 rounded-lg"><ClipboardList className="w-6 h-6" /></div>
+                  <h2 className="text-2xl font-bold">Phiếu Khảo Sát Cộng Đồng</h2>
+                </div>
+                <p className="text-rose-100 opacity-90 text-sm">Vui lòng điền đầy đủ các thông tin để cải thiện môi trường sống khu vực.</p>
+              </div>
+
+              <form onSubmit={handleFormSubmit} className="p-6 space-y-8">
+                {/* Phần 1: Thông tin chung */}
+                <section className="space-y-4">
+                  <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
+                    <span className="w-6 h-6 rounded-full bg-rose-600 text-white flex items-center justify-center text-xs font-bold">1</span>
+                    <h3 className="font-bold text-gray-800 uppercase tracking-wide">Thông tin cơ bản</h3>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-sm font-semibold text-gray-700">Tỉnh/Thành phố *</label>
+                      <select className="w-full border-gray-200 rounded-lg p-2 bg-gray-50 focus:ring-rose-500" required>
+                         {PROVINCES.map(p => <option key={p}>{p}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm font-semibold text-gray-700">Chi nhánh gần nhất *</label>
+                      <select className="w-full border-gray-200 rounded-lg p-2 bg-gray-50 focus:ring-rose-500" required>
+                         {BRANCHES[selectedProvince]?.map(b => <option key={b}>{b}</option>)}
+                      </select>
+                    </div>
+                    <div className="space-y-1 md:col-span-2">
+                      <label className="text-sm font-semibold text-gray-700">Họ và tên người khảo sát *</label>
+                      <input type="text" className="w-full border-gray-200 rounded-lg p-2 bg-gray-50" placeholder="Nguyễn Văn A" required />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm font-semibold text-gray-700">Năm sinh</label>
+                      <input type="number" className="w-full border-gray-200 rounded-lg p-2 bg-gray-50" placeholder="1980" />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm font-semibold text-gray-700">Giới tính</label>
+                      <div className="flex gap-4 p-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="radio" name="gender" defaultChecked className="text-rose-600" /> Nam
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="radio" name="gender" className="text-rose-600" /> Nữ
+                        </label>
+                      </div>
+                    </div>
+                    <div className="space-y-1 md:col-span-2">
+                      <label className="text-sm font-semibold text-gray-700">Địa chỉ cư trú</label>
+                      <input type="text" className="w-full border-gray-200 rounded-lg p-2 bg-gray-50" placeholder="Số nhà, đường, thôn/xóm..." />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-sm font-semibold text-gray-700">Khoảng cách đến C.P. (mét)</label>
+                      <input type="number" className="w-full border-gray-200 rounded-lg p-2 bg-gray-50" placeholder="VD: 500" />
+                    </div>
+                  </div>
+                </section>
+
+                {/* Phần 2: Nội dung khảo sát */}
+                <section className="space-y-6">
+                  <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
+                    <span className="w-6 h-6 rounded-full bg-rose-600 text-white flex items-center justify-center text-xs font-bold">2</span>
+                    <h3 className="font-bold text-gray-800 uppercase tracking-wide">Nội dung khảo sát chi tiết</h3>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <p className="text-sm font-bold text-gray-700">Câu 1: Ông/Bà đã cư trú ở đây bao nhiêu năm?</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {["dưới 5 năm", "5-10 năm", "11-20 năm", "trên 20 năm"].map(item => (
+                          <label key={item} className="p-3 border rounded-lg hover:bg-rose-50 cursor-pointer flex items-center gap-2 text-sm">
+                            <input type="radio" name="years" className="text-rose-600" /> {item}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-sm font-bold text-gray-700">Câu 2: Nhà ở của Ông/Bà gần với khu vực nào? (Có thể chọn nhiều)</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        {["Kênh rạch", "Sông", "Cống thoát chung", "Khác"].map(item => (
+                          <label key={item} className="p-3 border rounded-lg hover:bg-rose-50 cursor-pointer flex items-center gap-2 text-sm">
+                            <input type="checkbox" className="text-rose-600 rounded" /> {item}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-sm font-bold text-gray-700">Câu 3: Đánh giá tác động của C.P. đến đời sống khu vực:</p>
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse">
+                          <thead>
+                            <tr className="bg-gray-50 text-[10px] uppercase text-gray-500">
+                              <th className="p-2 border font-medium text-left">Yếu tố</th>
+                              <th className="p-2 border font-medium">Rất tốt</th>
+                              <th className="p-2 border font-medium">Bình thường</th>
+                              <th className="p-2 border font-medium text-rose-600">Xấu</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {["Rác thải", "Tiếng ồn", "Bụi", "Nước thải", "An ninh", "Lao động"].map(factor => (
+                              <tr key={factor}>
+                                <td className="p-2 border text-xs font-semibold">{factor}</td>
+                                <td className="p-2 border text-center"><input type="radio" name={factor} className="text-green-500" /></td>
+                                <td className="p-2 border text-center"><input type="radio" name={factor} className="text-gray-400" /></td>
+                                <td className="p-2 border text-center"><input type="radio" name={factor} className="text-rose-500" /></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-sm font-bold text-gray-700">Câu 4: Yếu tố Ông/Bà quan tâm nhất đối với các công ty?</p>
+                      <textarea className="w-full border border-gray-200 rounded-lg p-2 bg-gray-50 text-sm" rows="2" placeholder="Nhập ý kiến..."></textarea>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-sm font-bold text-gray-700">Câu 5: Đánh giá chung việc tuân thủ quy định của C.P.?</p>
+                      <select className="w-full border-gray-200 rounded-lg p-2 bg-gray-50 text-sm">
+                        <option>Rất tốt</option>
+                        <option>Tốt</option>
+                        <option>Bình thường</option>
+                        <option>Không tốt</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <p className="text-sm font-bold text-gray-700">Câu 6: Ý kiến/Đề xuất khác?</p>
+                      <textarea className="w-full border border-gray-200 rounded-lg p-2 bg-gray-50 text-sm" rows="3" placeholder="Ghi nhận phản hồi chi tiết..."></textarea>
+                    </div>
+                  </div>
+                </section>
+
+                <div className="pt-4 flex items-center justify-between gap-4">
+                   <button type="button" className="px-6 py-2 text-gray-500 font-medium hover:text-gray-700">Hủy bỏ</button>
+                   <button 
+                    disabled={isLoading}
+                    type="submit" 
+                    className={`flex-1 md:flex-none px-8 py-3 bg-rose-600 text-white font-bold rounded-lg shadow-lg hover:bg-rose-700 transition flex items-center justify-center gap-2 ${isLoading ? 'opacity-70' : ''}`}
+                   >
+                     {isLoading ? 'Đang gửi...' : <><Send className="w-5 h-5" /> Kết thúc & Lưu Khảo Sát</>}
+                   </button>
+                </div>
+              </form>
+            </div>
+            <div className="mt-8 mb-12 text-center text-gray-400 text-xs">
+              © 2024 C.P. VIETNAM CORPORATION - PHÒNG NHÂN SỰ (HR)
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'map' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 flex flex-col items-center justify-center min-h-[500px] text-center space-y-4">
+              <div className="w-16 h-16 bg-rose-100 text-rose-600 rounded-full flex items-center justify-center">
+                <MapIcon className="w-10 h-10" />
+              </div>
+              <div className="max-w-md">
+                <h2 className="text-xl font-bold">Interactive Community Map</h2>
+                <p className="text-gray-500 mt-2">Tính năng Bản đồ tương tác sử dụng Bing Maps API / Google Maps để trực quan hóa các điểm nóng khảo sát theo chi nhánh.</p>
+                <div className="mt-6 p-4 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                  <p className="text-sm font-medium text-gray-600">Mô phỏng giao diện:</p>
+                  <div className="flex justify-center gap-4 mt-3">
+                    <div className="flex items-center gap-1 text-xs"><span className="w-3 h-3 bg-green-500 rounded-full"></span> Hài lòng cao</div>
+                    <div className="flex items-center gap-1 text-xs"><span className="w-3 h-3 bg-amber-500 rounded-full"></span> Bình thường</div>
+                    <div className="flex items-center gap-1 text-xs"><span className="w-3 h-3 bg-rose-500 rounded-full"></span> Cần lưu ý</div>
+                  </div>
+                  <div className="mt-4 h-32 bg-gray-200 rounded relative overflow-hidden">
+                    <div className="absolute top-1/2 left-1/3 bg-rose-500 w-3 h-3 rounded-full animate-ping"></div>
+                    <div className="absolute top-1/2 left-1/3 bg-rose-600 w-2 h-2 rounded-full"></div>
+                    <div className="absolute top-1/4 left-2/3 bg-green-500 w-2 h-2 rounded-full"></div>
+                    <div className="absolute bottom-1/3 right-1/4 bg-amber-500 w-2 h-2 rounded-full"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* --- Mobile Bottom Nav --- */}
+      <div className="sm:hidden bg-white border-t border-gray-200 fixed bottom-0 left-0 right-0 z-50 px-4 py-2 flex justify-around">
+        <button onClick={() => setActiveTab('dashboard')} className={`flex flex-col items-center p-2 ${activeTab === 'dashboard' ? 'text-rose-600' : 'text-gray-400'}`}>
+          <LayoutDashboard className="w-6 h-6" />
+          <span className="text-[10px] mt-1 font-bold">Tổng hợp</span>
         </button>
+        <button onClick={() => setActiveTab('survey')} className={`flex flex-col items-center p-2 ${activeTab === 'survey' ? 'text-rose-600' : 'text-gray-400'}`}>
+          <ClipboardList className="w-6 h-6" />
+          <span className="text-[10px] mt-1 font-bold">Khảo sát</span>
+        </button>
+        <button onClick={() => setActiveTab('map')} className={`flex flex-col items-center p-2 ${activeTab === 'map' ? 'text-rose-600' : 'text-gray-400'}`}>
+          <MapPinned className="w-6 h-6" />
+          <span className="text-[10px] mt-1 font-bold">Bản đồ</span>
+        </button>
+      </div>
     </div>
-</div>
+  );
+};
 
-<script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-<script>
-    const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
-
-    createApp({
-        setup() {
-            const currentTab = ref('dashboard');
-            const selectedProvince = ref('');
-            const selectedBranch = ref('');
-            const mapRegion = ref('Bắc');
-            const showSuccess = ref(false);
-
-            const provinces = ['Hà Nội', 'Đồng Nai', 'Bình Định', 'Hải Dương', 'Huế'];
-            const branches = [
-                { name: 'CP Xuân Mai', province: 'Hà Nội', region: 'Bắc', satisfaction: 92, x: 45, y: 15 },
-                { name: 'CP Đồng Nai', province: 'Đồng Nai', region: 'Nam', satisfaction: 94, x: 52, y: 82 },
-                { name: 'CP Bình Định', province: 'Bình Định', region: 'Trung', satisfaction: 75, x: 62, y: 55 },
-                { name: 'CP Hải Dương', province: 'Hải Dương', region: 'Bắc', satisfaction: 88, x: 52, y: 20 }
-            ];
-
-            const tabs = [
-                { id: 'dashboard', label: 'Dashboard', icon: 'layout-dashboard' },
-                { id: 'map', label: 'Bản đồ', icon: 'map' },
-                { id: 'survey', label: 'Khảo sát', icon: 'edit' }
-            ];
-
-            const refreshIcons = () => {
-                nextTick(() => {
-                    if (window.lucide) {
-                        window.lucide.createIcons();
-                    }
-                });
-            };
-
-            const filteredBranches = computed(() => {
-                if (!selectedProvince.value) return [];
-                return branches.filter(b => b.province === selectedProvince.value);
-            });
-
-            const currentBranchData = computed(() => {
-                if (!selectedBranch.value) return null;
-                return branches.find(b => b.name === selectedBranch.value);
-            });
-
-            const filteredMarkers = computed(() => {
-                return branches.filter(b => b.region === mapRegion.value);
-            });
-
-            const kpiResults = [
-                { name: 'Nước thải từ nhà máy', ratings: [
-                    { level: 'Rất hài lòng', count: 42 },
-                    { level: 'Hài lòng', count: 5 },
-                    { level: 'Bình thường', count: 2 },
-                    { level: 'Không hài lòng', count: 1 },
-                    { level: 'Rất không hài lòng', count: 0 }
-                ]},
-                { name: 'Tình trạng rác thải', ratings: [
-                    { level: 'Rất hài lòng', count: 30 },
-                    { level: 'Hài lòng', count: 12 },
-                    { level: 'Bình thường', count: 5 },
-                    { level: 'Không hài lòng', count: 3 },
-                    { level: 'Rất không hài lòng', count: 0 }
-                ]}
-            ];
-
-            const submitSurvey = () => {
-                showSuccess.value = true;
-            };
-
-            const exportReport = () => {
-                alert('Yêu cầu đã được gửi. File PDF báo cáo sẽ được tạo và gửi qua Email hệ thống trong giây lát.');
-            };
-
-            onMounted(() => {
-                refreshIcons();
-            });
-
-            watch(currentTab, () => {
-                refreshIcons();
-            });
-
-            return {
-                tabs, currentTab, provinces, selectedProvince, filteredBranches, selectedBranch,
-                currentBranchData, kpiResults, mapRegion, filteredMarkers, showSuccess,
-                submitSurvey, exportReport
-            };
-        }
-    }).mount('#app');
-</script>
-
-</body>
-</html>
+export default App;
